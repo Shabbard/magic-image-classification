@@ -12,10 +12,30 @@ from io import BytesIO
 from numpy import random
 from scipy import ndimage
 import timeit
+import json
+from types import SimpleNamespace
 #import imagehash as ih
 
 def CardFileName( set_name, card_number ):
-    fname = 'images/' + set_name + '_' + str(card_number) + '.png'
+
+    base = "https://api.scryfall.com"
+    card_url = base + "/cards/" + set_name + '/' + str(card_number)
+    response = requests.get(card_url)
+
+    current_card = json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d))
+
+    fname = 'images/' + current_card.name + '.png'
+    return fname
+
+def DirtyCardFileName( set_name, card_number ):
+
+    base = "https://api.scryfall.com"
+    card_url = base + "/cards/" + set_name + '/' + str(card_number)
+    response = requests.get(card_url)
+
+    current_card = json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d))
+
+    fname = 'dirty/' + current_card.name + '.png'
     return fname
 
 def CardName( set_name, card_number ):
@@ -28,10 +48,16 @@ def CallImage( set_name , card_number ):
     if os.path.isfile(CardFileName(set_name, card_number)):
         pass
     else:
-        base = "https://img.scryfall.com/cards/png/en/"
-        card_url = base + set_name + '/' + str(card_number) + '.png'
-        im = Image.open(BytesIO(requests.get(card_url).content))
-        im.save( 'images/' + set_name + '_' + str(card_number) + '.png')
+        base = "https://api.scryfall.com"
+        card_url = base + "/cards/" + set_name + '/' + str(card_number)
+        response = requests.get(card_url)
+
+        current_card = json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d))
+
+        response = requests.get(current_card.image_uris.normal)
+        im = Image.open(BytesIO(response.content))
+        
+        im.save(CardFileName(set_name, card_number))
         print( "Called API")
 
 def RemoveImage( set_name, card_number ):
@@ -41,14 +67,14 @@ def RemoveImage( set_name, card_number ):
 
 def PullImage( set_name , card_number ):
     # Pull an image from the images folder and give it as a np.array
-    im = Image.open( 'images/' + set_name + '_' + str(card_number) + '.png' )
+    im = Image.open(CardFileName(set_name, card_number))
     im = np.array(im)[:,:,0:3]
     return im
 
 def s_PullImage( set_name , card_number ):
     # Pull an image from the images folder and give it as a np.array
     t0 = timeit.default_timer()
-    im = Image.open( 'images/' + set_name + '_' + str(card_number) + '.png' )
+    im = Image.open(CardFileName(set_name, card_number))
     topen = timeit.default_timer(); sopen = topen - t0
     im = np.array(im)[:,:,0:3]
     tarra = timeit.default_timer(); sarra = tarra - topen

@@ -9,15 +9,23 @@ import numpy as np
 import pandas as pd
 import generation_functions as gf
 from timeit import default_timer
+import requests, json
+from types import SimpleNamespace
+from PIL import Image
 
 
 train_images = []
 train_labels = []
 row_per_card = 100
 
-for j in range(274):
+set_name = "2xm"
+
+set_url = "https://api.scryfall.com" + "/sets/" + set_name
+response = requests.get(set_url)
+current_set = json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d))
+
+for j in range(2):
     t0 = default_timer()
-    set_name = 'kld'
     card_number = j + 1
     gf.CallImage(set_name, card_number)
     im = gf.PullImage(set_name, card_number)
