@@ -35,7 +35,7 @@ def DirtyCardFileName( set_name, card_number ):
 
     current_card = json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d))
 
-    fname = 'dirty/' + current_card.name + '.png'
+    fname = '/home/adam/Pictures/MtgDataset/2XM/' + current_card.name + "/" + current_card.name 
     return fname
 
 def CardName( set_name, card_number ):
@@ -142,7 +142,7 @@ def DirtyImage( im ):
     #im1 = ndimage.filters.median_filter( im1, int(random.exponential(3)+1))
     im1 = ndimage.filters.gaussian_filter( im1, random.exponential(1))
     #im1 = ndimage.rotate( im1, random.uniform(-2.5, 2.5) )
-    im1 = np.array(Image.fromarray(im1).rotate(random.uniform(-2.5,2.5)))
+    im1 = np.array(Image.fromarray(im1).rotate(random.uniform(-10,10)))
     return im1
 
 def s_DirtyImage( im ):

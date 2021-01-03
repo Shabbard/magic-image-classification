@@ -13,10 +13,11 @@ import requests, json
 from types import SimpleNamespace
 from PIL import Image
 
+import matplotlib.pyplot as plt
 
 train_images = []
 train_labels = []
-row_per_card = 100
+row_per_card = 15
 
 set_name = "2xm"
 
@@ -24,42 +25,20 @@ set_url = "https://api.scryfall.com" + "/sets/" + set_name
 response = requests.get(set_url)
 current_set = json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d))
 
-for j in range(2):
+for j in range(current_set.card_count):
     t0 = default_timer()
     card_number = j + 1
     gf.CallImage(set_name, card_number)
     im = gf.PullImage(set_name, card_number)
+    counter = 1
     for i in range(row_per_card):
         im1 = gf.DirtyImage(im)
-        im2 = gf.d_reshape(im1)
-        train_images.append( im2 )
+        # im2 = gf.d_reshape(im1)
+        img = Image.fromarray(im1, 'RGB')
+        img.save(gf.DirtyCardFileName(set_name, card_number) + "_" + str(counter) + '.png')
+        train_images.append( im1 )
         train_labels.append( gf.CardName(set_name, card_number))
+        counter += 1
     t1 = default_timer(); t_percard = t1 - t0
-    print( set_name + str(card_number) + ' is complete! ' + str(t_percard) + 'seconds')
+    print( gf.DirtyCardFileName(set_name, card_number) + ' is complete! ' +"(" + str(j) + "/" + str(current_set.card_count) + ") " + str(t_percard) + 'seconds')
     
-train_images = np.concatenate( train_images, axis = 0)
-train_labels = np.concatenate( train_labels, axis = 0)
-
-np.savez('train_images.npz', train_images)
-np.savez('train_labels.npz', train_labels)
-    
-#dp = pd.read_csv('C:/Users/Dustin/Desktop/thumbnail_data.csv')
-
-
-
-#server = 'SQL2016TRAINING'
-#database = 'magic_images'
-#table = 'data_v1'
-#conn = pyodbc.connect('DRIVER={SQL SERVER};SERVER=.\'+server+';DATABASE ='+database+';Trusted_Connection = yes')
-
-#conn = pyodbc.connect('DRIVER={SQL Server};SERVER=.\SQL2016TRAINING;DATABASE=magic_images;Trusted_Connection=yes')
-#cursor = conn.cursor()
-
-# Delete all data in the current SQL Server. This is only needed when the data generating process
-#   changes significantly. I would like to make a log of what sets have what data so I dont have 
-#   to constantly delete generated data at some point.
-# cursor.execute( 'DELETE FROM ' +database+'.dbo.'+table)
-
-#query = 'INSERT INTO '+database+'.dbo.'+table+' VALUES ('+",".join(ipha.astype(str))+')'
-#cursor.execute(query)
-#cursor.commit()
