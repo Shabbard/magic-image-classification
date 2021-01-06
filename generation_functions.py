@@ -14,67 +14,69 @@ from scipy import ndimage
 import timeit
 import json
 from types import SimpleNamespace
-#import imagehash as ih
+# import imagehash as ih
 
-def CardFileName( set_name, card_number ):
+base_url = "https://api.scryfall.com"
 
-    base = "https://api.scryfall.com"
-    card_url = base + "/cards/" + set_name + '/' + str(card_number)
+def GrabCardData(set_name, card_number):
+    card_url = base_url + "/cards/" + set_name + '/' + str(card_number)
     response = requests.get(card_url)
 
-    current_card = json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d))
+    return json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d))
 
-    fname = 'images/' + current_card.name + '.png'
-    return fname
+def CardFileName( card_name ):
+    return '/hdd/Programming/magic-image-classification/images/' + card_name + '.png'
 
-def DirtyCardFileName( set_name, card_number ):
+def DirtyCardFileName( card_name ):
+    return '/hdd/Pictures/MtgDataset/2XM/' + card_name + "/" + card_name
 
-    base = "https://api.scryfall.com"
-    card_url = base + "/cards/" + set_name + '/' + str(card_number)
-    response = requests.get(card_url)
+def GetCurrentCardDirectory(card_name):
+    return '/hdd/Pictures/MtgDataset/2XM/' + card_name + "/"
 
-    current_card = json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d))
-
-    fname = '/home/adam/Pictures/MtgDataset/2XM/' + current_card.name + "/" + current_card.name 
-    return fname
+def GetNumFilesInDir(dir):
+    files = os.listdir(dir)
+    return len(files)
 
 def CardName( set_name, card_number ):
     cname = set_name + '_' + str(card_number)
     return cname
 
+def GetSetCardCount(set_name):
+    set_url = base_url + "/sets/" + set_name
+    response = requests.get(set_url)
+    return json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d))
+
 def CallImage( set_name , card_number ):
     # Call the Scryfall API for a png image if it is not currently saved in the
     #       image folder
-    if os.path.isfile(CardFileName(set_name, card_number)):
-        pass
+    current_card = GrabCardData(set_name , card_number)
+
+    if os.path.isfile(CardFileName(current_card.name)):
+        return current_card
     else:
-        base = "https://api.scryfall.com"
-        card_url = base + "/cards/" + set_name + '/' + str(card_number)
-        response = requests.get(card_url)
-
-        current_card = json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d))
-
         response = requests.get(current_card.image_uris.normal)
         im = Image.open(BytesIO(response.content))
         
-        im.save(CardFileName(set_name, card_number))
+        im.save(CardFileName(current_card.name))
         print( "Called API")
 
-def RemoveImage( set_name, card_number ):
-    # Delete an image from the image folder
-    if os.path.isfile(CardFileName(set_name, card_number)):
-        os.remove( CardFileName(set_name, card_number) )
+        return current_card
 
-def PullImage( set_name , card_number ):
+def RemoveImage( card_name ):
+    # Delete an image from the image folder
+    if os.path.isfile(CardFileName(card_name)):
+        os.remove( CardFileName(card_name) )
+
+def PullImage( card_name ):
     # Pull an image from the images folder and give it as a np.array
-    im = Image.open(CardFileName(set_name, card_number))
+    im = Image.open(CardFileName(card_name))
     im = np.array(im)[:,:,0:3]
     return im
 
-def s_PullImage( set_name , card_number ):
+def s_PullImage( card_name ):
     # Pull an image from the images folder and give it as a np.array
     t0 = timeit.default_timer()
-    im = Image.open(CardFileName(set_name, card_number))
+    im = Image.open(CardFileName(card_name))
     topen = timeit.default_timer(); sopen = topen - t0
     im = np.array(im)[:,:,0:3]
     tarra = timeit.default_timer(); sarra = tarra - topen
@@ -166,12 +168,12 @@ def s_DirtyImage( im ):
     times = np.array( (scopy, sline, scirc, ssalt, sgaus, srota) )
     return [im1, times]
 
-def HashImage( im ):
-    # Convert a numpy array image into a hash, convert the hexidecimal into integers
-    ph = ih.phash(Image.fromarray(im[:,:,:]))
-    vint = np.vectorize(int)
-    iph = vint(np.array(list(str(ph))).astype(str),16)
-    return iph
+# def HashImage( im ):
+#     # Convert a numpy array image into a hash, convert the hexidecimal into integers
+#     ph = ih.phash(Image.fromarray(im[:,:,:]))
+#     vint = np.vectorize(int)
+#     iph = vint(np.array(list(str(ph))).astype(str),16)
+#     return iph
 
 
 def d_reshape( im, width = 84, length = 117):
