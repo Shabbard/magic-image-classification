@@ -14,6 +14,9 @@ from scipy import ndimage
 import timeit
 import json
 from types import SimpleNamespace
+import numpy as np
+from scipy.ndimage import zoom
+import cv2
 # import imagehash as ih
 
 base_url = "https://api.scryfall.com"
@@ -28,10 +31,10 @@ def CardFileName( card_name ):
     return '/hdd/Programming/magic-image-classification/images/' + card_name + '.png'
 
 def DirtyCardFileName( card_name ):
-    return '/hdd/Pictures/MtgDataset/2XM/' + card_name + "/" + card_name
+    return '/home/adam/Pictures/MtgDataset/2XM/' + card_name + "/" + card_name
 
 def GetCurrentCardDirectory(card_name):
-    return '/hdd/Pictures/MtgDataset/2XM/' + card_name + "/"
+    return '/home/adam/Pictures/MtgDataset/2XM/' + card_name + "/"
 
 def GetNumFilesInDir(dir):
     files = os.listdir(dir)
@@ -41,26 +44,22 @@ def CardName( set_name, card_number ):
     cname = set_name + '_' + str(card_number)
     return cname
 
-def GetSetCardCount(set_name):
-    set_url = base_url + "/sets/" + set_name
-    response = requests.get(set_url)
-    return json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d))
-
-def CallImage( set_name , card_number ):
+def CallImage( set_name, card_number, lut ):
     # Call the Scryfall API for a png image if it is not currently saved in the
     #       image folder
-    current_card = GrabCardData(set_name , card_number)
+    current_card = lut[card_number]
 
-    if os.path.isfile(CardFileName(current_card.name)):
+    if os.path.isfile(CardFileName(current_card)):
         return current_card
     else:
+        current_card = GrabCardData(set_name, card_number + 1) # add 1 to the card number as the array/lut starts at 0 
         response = requests.get(current_card.image_uris.normal)
         im = Image.open(BytesIO(response.content))
         
         im.save(CardFileName(current_card.name))
         print( "Called API")
 
-        return current_card
+        return current_card.name
 
 def RemoveImage( card_name ):
     # Delete an image from the image folder
@@ -136,6 +135,7 @@ def DirtyImage( im ):
     # An assembly of filters and objects to add to an np.array image to 
     #       randomly produce a new, dirtier image. Outputs as a np.array
     im1 = np.copy(im[:,:,:])
+    
     for i in range( int( random.uniform(0, 20) ) ):
         im1 = addline(im1)
     for i in range( int( random.uniform(0, 20) ) ):
@@ -145,6 +145,7 @@ def DirtyImage( im ):
     im1 = ndimage.filters.gaussian_filter( im1, random.exponential(1))
     #im1 = ndimage.rotate( im1, random.uniform(-2.5, 2.5) )
     im1 = np.array(Image.fromarray(im1).rotate(random.uniform(-10,10)))
+    im1 = cv2_clipped_zoom(im1, random.uniform(0.75, 1.0))
     return im1
 
 def s_DirtyImage( im ):
@@ -184,3 +185,79 @@ def d_reshape( im, width = 84, length = 117):
     arm1 = arm1[None,:,:,:]
     #fm1 = np.reshape(arm1, 117*84*3)
     return arm1
+
+def clipped_zoom(img, zoom_factor, **kwargs):
+
+    h, w = img.shape[:2]
+
+    # For multichannel images we don't want to apply the zoom factor to the RGB
+    # dimension, so instead we create a tuple of zoom factors, one per array
+    # dimension, with 1's for any trailing dimensions after the width and height.
+    zoom_tuple = (zoom_factor,) * 2 + (1,) * (img.ndim - 2)
+
+    # Zooming out
+    if zoom_factor < 1:
+
+        # Bounding box of the zoomed-out image within the output array
+        zh = int(np.round(h * zoom_factor))
+        zw = int(np.round(w * zoom_factor))
+        top = (h - zh) // 2
+        left = (w - zw) // 2
+
+        # Zero-padding
+        out = np.zeros_like(img)
+        out[top:top+zh, left:left+zw] = zoom(img, zoom_tuple, **kwargs)
+
+    # Zooming in
+    elif zoom_factor > 1:
+
+        # Bounding box of the zoomed-in region within the input array
+        zh = int(np.round(h / zoom_factor))
+        zw = int(np.round(w / zoom_factor))
+        top = (h - zh) // 2
+        left = (w - zw) // 2
+
+        out = zoom(img[top:top+zh, left:left+zw], zoom_tuple, **kwargs)
+
+        # `out` might still be slightly larger than `img` due to rounding, so
+        # trim off any extra pixels at the edges
+        trim_top = ((out.shape[0] - h) // 2)
+        trim_left = ((out.shape[1] - w) // 2)
+        out = out[trim_top:trim_top+h, trim_left:trim_left+w]
+
+    # If zoom_factor == 1, just return the input array
+    else:
+        out = img
+    return out
+
+def cv2_clipped_zoom(img, zoom_factor):
+    """
+    Center zoom in/out of the given image and returning an enlarged/shrinked view of 
+    the image without changing dimensions
+    Args:
+        img : Image array
+        zoom_factor : amount of zoom as a ratio (0 to Inf)
+    """
+    height, width = img.shape[:2] # It's also the final desired shape
+    new_height, new_width = int(height * zoom_factor), int(width * zoom_factor)
+
+    ### Crop only the part that will remain in the result (more efficient)
+    # Centered bbox of the final desired size in resized (larger/smaller) image coordinates
+    y1, x1 = max(0, new_height - height) // 2, max(0, new_width - width) // 2
+    y2, x2 = y1 + height, x1 + width
+    bbox = np.array([y1,x1,y2,x2])
+    # Map back to original image coordinates
+    bbox = (bbox / zoom_factor).astype(np.int)
+    y1, x1, y2, x2 = bbox
+    cropped_img = img[y1:y2, x1:x2]
+
+    # Handle padding when downscaling
+    resize_height, resize_width = min(new_height, height), min(new_width, width)
+    pad_height1, pad_width1 = (height - resize_height) // 2, (width - resize_width) //2
+    pad_height2, pad_width2 = (height - resize_height) - pad_height1, (width - resize_width) - pad_width1
+    pad_spec = [(pad_height1, pad_height2), (pad_width1, pad_width2)] + [(0,0)] * (img.ndim - 2)
+
+    result = cv2.resize(cropped_img, (resize_width, resize_height))
+    result = np.pad(result, pad_spec, mode='constant')
+    assert result.shape[0] == height and result.shape[1] == width
+    return result
